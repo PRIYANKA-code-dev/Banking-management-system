@@ -1,0 +1,94 @@
+CREATE OR ALTER PROCEDURE sp_TransferMoney
+    @FromAccountNumber NVARCHAR(20),
+    @ToAccountNumber NVARCHAR(20),
+    @Amount DECIMAL(15,2),
+    @Description NVARCHAR(500) = 'Account transfer'
+ AS
+ BEGIN
+    SET NOCOUNT ON;
+    
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        
+        -- Validate amount
+        IF @Amount <= 0
+        BEGIN
+            RAISERROR('Transfer amount must be greater than zero.', 16, 1);
+            RETURN;
+        END
+        
+        -- Validate different accounts
+        IF @FromAccountNumber = @ToAccountNumber
+        BEGIN
+            RAISERROR('Cannot transfer to the same account.', 16, 1);
+            RETURN;
+        END
+        
+        -- Get source account information
+        DECLARE @FromAccountID INT, @FromBalance DECIMAL(15,2), @FromMinBalance DECIMAL(1
+        
+        SELECT a.AccountID, a.Balance, at.MinimumBalance
+        INTO @FromAccountID, @FromBalance, @FromMinBalance
+        FROM Accounts a
+        INNER JOIN AccountTypes at ON a.AccountTypeID = at.AccountTypeID
+        WHERE a.AccountNumber = @FromAccountNumber AND a.Status = 'Active';
+        
+        IF @FromAccountID IS NULL
+        BEGIN
+            RAISERROR('Source account not found or inactive.', 16, 1);
+            RETURN;
+        END
+        
+        -- Get destination account information
+        DECLARE @ToAccountID INT;
+        
+        SELECT @ToAccountID = AccountID
+        FROM Accounts 
+        WHERE AccountNumber = @ToAccountNumber AND Status = 'Active';
+        
+        IF @ToAccountID IS NULL
+        BEGIN
+            RAISERROR('Destination account not found or inactive.', 16, 1);
+            RETURN;
+        END
+        
+        -- Check sufficient funds
+        IF (@FromBalance - @Amount) < @FromMinBalance
+        BEGIN
+            RAISERROR('Insufficient funds. Current balance: $%s, Minimum balance required
+                     CAST(@FromBalance AS NVARCHAR(20)), CAST(@FromMinBalance AS NVARCHAR
+            RETURN;
+        END
+        
+        -- Update source account balance (debit)
+        UPDATE Accounts 
+        SET Balance = Balance - @Amount,
+            LastTransactionDate = GETDATE(),
+            LastModified = GETDATE()
+        WHERE AccountID = @FromAccountID;
+        
+        -- Update destination account balance (credit)
+        UPDATE Accounts 
+        SET Balance = Balance + @Amount,
+            LastTransactionDate = GETDATE(),
+            LastModified = GETDATE()
+        WHERE AccountID = @ToAccountID;
+        
+        -- Record transfer transaction
+        DECLARE @TransactionNumber NVARCHAR(50) = 'TXN' + FORMAT(NEXT VALUE FOR seq_Trans
+        
+        INSERT INTO Transactions (TransactionNumber, FromAccountID, ToAccountID, Transact
+        VALUES (@TransactionNumber, @FromAccountID, @ToAccountID, 3, @Amount, @Descriptio
+        
+        COMMIT TRANSACTION;
+        
+        PRINT 'Transfer successful. Amount: $' + CAST(@Amount AS NVARCHAR(20)) + 
+              ' transferred from ' + @FromAccountNumber + ' to ' + @ToAccountNumber;
+        
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        THROW;
+    END CATCH
+ END;
+ GO
