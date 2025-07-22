@@ -1,0 +1,55 @@
+CREATE OR ALTER PROCEDURE sp_DepositMoney
+    @AccountNumber NVARCHAR(20),
+    @Amount DECIMAL(15,2),
+    @Description NVARCHAR(500) = 'Cash deposit'
+ AS
+ BEGIN
+    SET NOCOUNT ON;
+    
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        
+        -- Validate amount
+        IF @Amount <= 0
+        BEGIN
+            RAISERROR('Deposit amount must be greater than zero.', 16, 1);
+            RETURN;
+        END
+        
+        -- Get account information
+        DECLARE @AccountID INT, @CurrentBalance DECIMAL(15,2);
+        
+        SELECT @AccountID = AccountID, @CurrentBalance = Balance
+        FROM Accounts 
+        WHERE AccountNumber = @AccountNumber AND Status = 'Active';
+        
+        IF @AccountID IS NULL
+        BEGIN
+            RAISERROR('Account not found or inactive.', 16, 1);
+            RETURN;
+        END
+        
+        -- Update account balance
+        UPDATE Accounts 
+        SET Balance = Balance + @Amount,
+            LastTransactionDate = GETDATE(),
+            LastModified = GETDATE()
+        WHERE AccountID = @AccountID;
+        
+        -- Record transaction
+        DECLARE @TransactionNumber NVARCHAR(50) = 'TXN' + FORMAT(NEXT VALUE FOR seq_Trans
+        
+        INSERT INTO Transactions (TransactionNumber, ToAccountID, TransactionTypeID, Amou
+        VALUES (@TransactionNumber, @AccountID, 1, @Amount, @Description);
+        
+        COMMIT TRANSACTION;
+        
+        PRINT 'Deposit successful. New balance: $' + CAST((@CurrentBalance + @Amount) AS 
+        
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        THROW;
+    END CATCH
+ END;
+ GO
