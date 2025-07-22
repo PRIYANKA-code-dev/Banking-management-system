@@ -1,0 +1,57 @@
+CREATE OR ALTER PROCEDURE sp_GetTransactionHistory
+    @AccountNumber NVARCHAR(20),
+    @StartDate DATETIME2 = NULL,
+    @EndDate DATETIME2 = NULL,
+    @TransactionType NVARCHAR(50) = NULL,
+    @MaxRecords INT = 100
+ AS
+ BEGIN
+    SET NOCOUNT ON;
+    
+    -- Set default date range if not provided
+    IF @StartDate IS NULL
+        SET @StartDate = DATEADD(MONTH, -3, GETDATE());
+    
+    IF @EndDate IS NULL
+        SET @EndDate = GETDATE();
+    
+    -- Get account ID
+    DECLARE @AccountID INT;
+    
+    SELECT @AccountID = AccountID
+    FROM Accounts 
+    WHERE AccountNumber = @AccountNumber;
+    
+    IF @AccountID IS NULL
+    BEGIN
+        RAISERROR('Account not found.', 16, 1);
+        RETURN;
+    END
+    
+    -- Return transaction history
+    SELECT TOP (@MaxRecords)
+        t.TransactionNumber,
+        t.TransactionDate,
+        tt.TypeName AS TransactionType,
+        CASE 
+            WHEN t.FromAccountID = @AccountID THEN 'Debit'
+            WHEN t.ToAccountID = @AccountID THEN 'Credit'
+        END AS DebitCredit,
+        t.Amount,
+        CASE 
+            WHEN t.FromAccountID = @AccountID AND t.ToAccountID IS NOT NULL 
+            THEN (SELECT AccountNumber FROM Accounts WHERE AccountID = t.ToAccountID)
+            WHEN t.ToAccountID = @AccountID AND t.FromAccountID IS NOT NULL 
+            THEN (SELECT AccountNumber FROM Accounts WHERE AccountID = t.FromAccountID)
+            ELSE NULL
+        END AS OtherAccountNumber,
+        t.Description,
+        t.Status
+    FROM Transactions t
+    INNER JOIN TransactionTypes tt ON t.TransactionTypeID = tt.TransactionTypeID
+    WHERE (t.FromAccountID = @AccountID OR t.ToAccountID = @AccountID)
+      AND t.TransactionDate BETWEEN @StartDate AND @EndDate
+      AND (@TransactionType IS NULL OR tt.TypeName = @TransactionType)
+ORDER BY t.TransactionDate DESC;
+ END;
+ GO
