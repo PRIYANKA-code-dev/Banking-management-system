@@ -1,0 +1,50 @@
+-- =====================================================-- Banking System Database - Stored Procedures-- SQL Server Implementation-- =====================================================
+ USE BankingSystem;
+ GO-- =====================================================-- CREATE SEQUENCES FOR UNIQUE NUMBERS-- =====================================================
+ CREATE SEQUENCE seq_AccountNumber AS INT START WITH 1000000001;
+ GO
+ CREATE SEQUENCE seq_TransactionNumber AS INT START WITH 1000000001;
+ GO-- =====================================================-- 1. CREATE CUSTOMER PROCEDURE-- =====================================================
+ CREATE OR ALTER PROCEDURE sp_CreateCustomer
+ @FirstName NVARCHAR(50),
+ @LastName NVARCHAR(50),
+ @DateOfBirth DATE,
+ @Email NVARCHAR(100),
+ @PhoneNumber NVARCHAR(15),
+ @Address NVARCHAR(200),
+ @City NVARCHAR(50),
+    @State NVARCHAR(50),
+    @ZipCode NVARCHAR(10),
+    @SSN NVARCHAR(11),
+    @CustomerID INT OUTPUT
+ AS
+ BEGIN
+    SET NOCOUNT ON;
+    
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        
+        -- Check if email or SSN already exists
+        IF EXISTS (SELECT 1 FROM Customers WHERE Email = @Email OR SSN = @SSN)
+        BEGIN
+            RAISERROR('Customer with this email or SSN already exists.', 16, 1);
+            RETURN;
+        END
+        
+        -- Insert new customer
+        INSERT INTO Customers (FirstName, LastName, DateOfBirth, Email, PhoneNumber, Addr
+        VALUES (@FirstName, @LastName, @DateOfBirth, @Email, @PhoneNumber, @Address, @Cit
+        
+        SET @CustomerID = SCOPE_IDENTITY();
+        
+        COMMIT TRANSACTION;
+        
+        PRINT 'Customer created successfully with ID: ' + CAST(@CustomerID AS NVARCHAR(10
+        
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        THROW;
+    END CATCH
+ END;
+ GO
