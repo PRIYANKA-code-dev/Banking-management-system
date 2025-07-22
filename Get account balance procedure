@@ -1,0 +1,24 @@
+ CREATE OR ALTER PROCEDURE sp_GetAccountBalance
+ @AccountNumber NVARCHAR(20)
+ AS
+ BEGIN
+ SET NOCOUNT ON;
+ SELECT 
+a.AccountNumber,
+ c.FirstName + ' ' + c.LastName AS CustomerName,
+ at.TypeName AS AccountType,
+ a.Balance AS CurrentBalance,
+ at.MinimumBalance,
+ a.Status AS AccountStatus,
+ a.LastTransactionDate
+ FROM Accounts a
+ INNER JOIN Customers c ON a.CustomerID = c.CustomerID
+ INNER JOIN AccountTypes at ON a.AccountTypeID = at.AccountTypeID
+ WHERE a.AccountNumber = @AccountNumber;
+ IF @@ROWCOUNT = 0
+ BEGIN
+ RAISERROR('Account not found.', 16, 1);
+ END
+ END;
+ GO
+ PRINT 'Banking System Stored Procedures Created Successfully!'
