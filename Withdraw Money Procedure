@@ -1,0 +1,65 @@
+ CREATE OR ALTER PROCEDURE sp_WithdrawMoney
+    @AccountNumber NVARCHAR(20),
+    @Amount DECIMAL(15,2),
+    @Description NVARCHAR(500) = 'Cash withdrawal'
+ AS
+ BEGIN
+    SET NOCOUNT ON;
+    
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        
+        -- Validate amount
+        IF @Amount <= 0
+        BEGIN
+            RAISERROR('Withdrawal amount must be greater than zero.', 16, 1);
+            RETURN;
+        END
+        
+        -- Get account information
+        DECLARE @AccountID INT, @CurrentBalance DECIMAL(15,2), @MinBalance DECIMAL(15,2);
+        
+        SELECT a.AccountID, a.Balance, at.MinimumBalance
+        INTO @AccountID, @CurrentBalance, @MinBalance
+        FROM Accounts a
+        INNER JOIN AccountTypes at ON a.AccountTypeID = at.AccountTypeID
+        WHERE a.AccountNumber = @AccountNumber AND a.Status = 'Active';
+        
+        IF @AccountID IS NULL
+        BEGIN
+            RAISERROR('Account not found or inactive.', 16, 1);
+            RETURN;
+        END
+        
+        -- Check sufficient funds
+        IF (@CurrentBalance - @Amount) < @MinBalance
+        BEGIN
+            RAISERROR('Insufficient funds. Current balance: $%s, Minimum balance required
+                     CAST(@CurrentBalance AS NVARCHAR(20)), CAST(@MinBalance AS NVARCHAR(
+            RETURN;
+        END
+        
+        -- Update account balance
+        UPDATE Accounts 
+        SET Balance = Balance - @Amount,
+            LastTransactionDate = GETDATE(),
+            LastModified = GETDATE()
+        WHERE AccountID = @AccountID;
+        
+        -- Record transaction
+        DECLARE @TransactionNumber NVARCHAR(50) = 'TXN' + FORMAT(NEXT VALUE FOR seq_Trans
+        
+        INSERT INTO Transactions (TransactionNumber, FromAccountID, TransactionTypeID, Am
+        VALUES (@TransactionNumber, @AccountID, 2, @Amount, @Description);
+        
+        COMMIT TRANSACTION;
+        
+        PRINT 'Withdrawal successful. New balance: $' + CAST((@CurrentBalance - @Amount) 
+        
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        THROW;
+    END CATCH
+ END;
+ GO
