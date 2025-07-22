@@ -1,0 +1,70 @@
+-- =====================================================-- 2. OPEN ACCOUNT PROCEDURE-- =====================================================
+ CREATE OR ALTER PROCEDURE sp_OpenAccount
+    @CustomerID INT,
+    @AccountTypeID INT,
+    @InitialDeposit DECIMAL(15,2) = 0.00,
+    @AccountID INT OUTPUT,
+    @AccountNumber NVARCHAR(20) OUTPUT
+ AS
+ BEGIN
+    SET NOCOUNT ON;
+    
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        
+        -- Validate customer exists
+        IF NOT EXISTS (SELECT 1 FROM Customers WHERE CustomerID = @CustomerID AND IsActiv
+        BEGIN
+            RAISERROR('Customer not found or inactive.', 16, 1);
+            RETURN;
+        END
+        
+        -- Validate account type exists
+        IF NOT EXISTS (SELECT 1 FROM AccountTypes WHERE AccountTypeID = @AccountTypeID AN
+        BEGIN
+            RAISERROR('Invalid account type.', 16, 1);
+            RETURN;
+        END
+        
+        -- Check minimum balance requirement
+        DECLARE @MinBalance DECIMAL(15,2);
+        SELECT @MinBalance = MinimumBalance FROM AccountTypes WHERE AccountTypeID = @Acco
+        
+        IF @InitialDeposit < @MinBalance
+        BEGIN
+            RAISERROR('Initial deposit must meet minimum balance requirement of $%s.', 16
+            RETURN;
+        END
+        
+        -- Generate account number
+        SET @AccountNumber = 'ACC' + FORMAT(NEXT VALUE FOR seq_AccountNumber, '000000000'
+        
+        -- Insert new account
+        INSERT INTO Accounts (AccountNumber, CustomerID, AccountTypeID, Balance)
+        VALUES (@AccountNumber, @CustomerID, @AccountTypeID, @InitialDeposit);
+        
+        SET @AccountID = SCOPE_IDENTITY();
+        
+        -- Record initial deposit transaction if amount > 0
+        IF @InitialDeposit > 0
+        BEGIN
+            DECLARE @TransactionNumber NVARCHAR(50) = 'TXN' + FORMAT(NEXT VALUE FOR seq_T
+            
+            INSERT INTO Transactions (TransactionNumber, ToAccountID, TransactionTypeID, 
+            VALUES (@TransactionNumber, @AccountID, 1, @InitialDeposit, 'Initial deposit 
+        END
+        
+        -- Update last transaction date
+        UPDATE Accounts SET LastTransactionDate = GETDATE() WHERE AccountID = @AccountID;
+        
+        COMMIT TRANSACTION;
+        
+        PRINT 'Account opened successfully. Account Number: ' + @AccountNumber;
+        
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        THROW;
+    END CATCH
+ END;
+ GO
